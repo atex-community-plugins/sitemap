@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-fragment xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xmlns="http://java.sun.com/xml/ns/javaee"
+              xmlns:web="http://java.sun.com/xml/ns/javaee/web-app_3_1.xsd"
+              xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-fragment_3_1.xsd"
+              id="WebAppFragment_ID"
+              version="3.1">
+
+  <name>sitemap-fragment</name>
+
+  <context-param>
+    <param-name>cmservlet_ignore.sitemap_generator</param-name>
+    <param-value>sitemapGenerator</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>cmservlet_ignore.sitemap_xml</param-name>
+    <param-value>sitemap.xml</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>cmservlet_ignore.sitemap_news.xml</param-name>
+    <param-value>sitemap_news.xml</param-value>
+  </context-param>
+
+  <context-param>
+    <param-name>cmservlet_ignore.sitemap_video.xml</param-name>
+    <param-value>sitemap_video.xml</param-value>
+  </context-param>
+
+</web-fragment>

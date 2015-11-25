@@ -1,0 +1,16 @@
+id:.
+major:appconfig
+inputtemplate:com.atex.plugins.sitemap.Configuration
+securityparent:p.siteengine.Configuration.d
+component:polopoly.Content:name:Sitemap Configuration
+component:user:value:sysadmin
+component:password:value:sysadmin
+component:priority_site:value:1.0
+component:priority_page:value:0.5
+component:priority_content:value:0.8
+component:changefreq_site:value:hourly
+component:changefreq_page:value:hourly
+component:changefreq_content:value:monthly
+component:article_it:value:standard.Article
+component:gallery_it:value:com.atex.plugins.image-gallery.MainElement
+component:video_it:value:com.atex.plugins.video.MainElement
