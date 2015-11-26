@@ -2,7 +2,7 @@
 
 function usage {
   echo "Usage: $scriptName url"
-  exit 1  
+  exit 1
 }
 
 function dumpUrl {
@@ -11,7 +11,7 @@ function dumpUrl {
     # Mac OSX
     dateParam=$(date -jf"%s" ${d} +"%Y-%m-%d")
   else
-    dateParam=$(date -jf"%s" ${d} +"%Y-%m-%d")
+    dateParam=$(printf "%(%Y-%m-%d)T" "${d}")
   fi
   echo "${url}?date=${dateParam}"
 }
@@ -29,7 +29,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   # Mac OSX
   from=$(date -jf"%Y-%m-%d" ${now}-01 +%s)
 else
-  from=$(date -jf"%Y-%m-%d" ${now}-01 +%s)
+  from=$(date -d ${now}-01 +%s)
 fi
 
 dumpUrl ${from}
