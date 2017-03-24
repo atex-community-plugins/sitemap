@@ -15,7 +15,10 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
 
+import com.atex.onecms.content.ContentManager;
+import com.atex.onecms.content.RepositoryClient;
 import com.polopoly.application.Application;
+import com.polopoly.application.IllegalApplicationStateException;
 import com.polopoly.application.servlet.ApplicationServletUtil;
 import com.polopoly.cm.client.CmClient;
 import com.polopoly.cm.client.CmClientBase;
@@ -34,6 +37,7 @@ public class SitemapReadServlet extends HttpServlet {
     private static final Logger logger = Logger.getLogger(SitemapReadServlet.class.getName());
 
     private CmClient cmClient;
+    private ContentManager contentManager;
     private SearchClient searchClient;
 
     @Override
@@ -45,6 +49,14 @@ public class SitemapReadServlet extends HttpServlet {
         final Application application = ApplicationServletUtil.getApplication(servletContext);
         cmClient = (CmClient) application.getApplicationComponent(CmClientBase.DEFAULT_COMPOUND_NAME);
         searchClient = (SearchClient) application.getApplicationComponent(SolrSearchClient.DEFAULT_COMPOUND_NAME);
+
+        try {
+            final RepositoryClient repositoryClient = application.getPreferredApplicationComponent(RepositoryClient.class);
+            contentManager = repositoryClient.getContentManager();
+        } catch (IllegalApplicationStateException e) {
+            logger.log(Level.SEVERE, e.getMessage(), e);
+            throw new ServletException(e);
+        }
     }
 
     @Override
@@ -52,7 +64,7 @@ public class SitemapReadServlet extends HttpServlet {
                                                                                           IOException {
 
         final PolicyCMServer cmServer = cmClient.getPolicyCMServer();
-        final SitemapUtil sitemapUtil = new SitemapUtil(cmServer, searchClient);
+        final SitemapUtil sitemapUtil = new SitemapUtil(cmServer, contentManager, searchClient);
 
         ServletOutputStream stream = null;
         BufferedInputStream buf = null;

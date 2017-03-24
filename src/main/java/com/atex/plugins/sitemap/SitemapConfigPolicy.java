@@ -1,18 +1,26 @@
 package com.atex.plugins.sitemap;
 
 import java.util.List;
+import java.util.logging.Level;
 
+import com.atex.onecms.content.ContentResult;
+import com.atex.onecms.content.ContentResultBuilder;
+import com.atex.onecms.content.ContentWrite;
+import com.atex.onecms.content.LegacyContentAdapter;
 import com.atex.plugins.baseline.policy.BaselinePolicy;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.polopoly.cm.app.policy.SingleValued;
+import com.polopoly.cm.client.CMException;
+import com.polopoly.cm.policymvc.PolicyModelDomain;
 
 /**
  * Policy for the plugin configuration.
  *
  * @author mnova
  */
-public class SitemapConfigPolicy extends BaselinePolicy {
+public class SitemapConfigPolicy extends BaselinePolicy implements LegacyContentAdapter<SitemapConfigBean> {
 
     public static final String CONFIG_EXT_ID = "plugins.com.atex.plugins.sitemap.Config";
 
@@ -28,6 +36,8 @@ public class SitemapConfigPolicy extends BaselinePolicy {
     private static final String ARTICLE_IT = "article_it";
     private static final String GALLERY_IT = "gallery_it";
     private static final String VIDEO_IT = "video_it";
+    private static final String ARTICLE_LANGUAGE = "article_language";
+    private static final String ARTICLE_GENRE = "article_genre";
 
     public String getUser() {
         return Strings.nullToEmpty(getChildValue(USER, ""));
@@ -86,4 +96,48 @@ public class SitemapConfigPolicy extends BaselinePolicy {
                 .split(value)
         );
     }
+
+    public String getArticleLanguage() {
+        return getChildValue(ARTICLE_LANGUAGE, null);
+    }
+
+    public String getArticleGenre() {
+        return getChildValue(ARTICLE_GENRE, null);
+    }
+
+    @Override
+    public ContentResult<SitemapConfigBean> legacyToNew(final PolicyModelDomain policyModelDomain) throws CMException {
+
+        final SitemapConfigBean bean = new SitemapConfigBean();
+
+        bean.setArticleLanguage(getArticleLanguage());
+        bean.setArticleGenre(getArticleGenre());
+
+        return new ContentResultBuilder<SitemapConfigBean>()
+                .mainAspectData(bean)
+                .build();
+    }
+
+    @Override
+    public void newToLegacy(final ContentWrite<SitemapConfigBean> contentWrite) throws CMException {
+        final SitemapConfigBean bean = contentWrite.getContentData();
+        if (bean != null) {
+            setChildValue(ARTICLE_LANGUAGE, bean.getArticleLanguage());
+            setChildValue(ARTICLE_GENRE, bean.getArticleGenre());
+        }
+    }
+
+    private void setChildValue(final String name, final String value) throws CMException {
+        try {
+            final SingleValued child = (SingleValued) getChildPolicy(name);
+            if (child != null) {
+                child.setValue(value);
+            }
+        } catch (ClassCastException cce) {
+            logger.log(Level.WARNING, name + " in " + getContentId() + " has unsupported policy.");
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Error getting child value", e);
+        }
+    }
+
 }

@@ -48,5 +48,11 @@
     <field name="video_it" input-template="p.TextInput"
            label="com.atex.plugins.sitemap.Configuration.video_it">
     </field>
+    <field name="article_language" input-template="p.TextInput"
+           label="com.atex.plugins.sitemap.Configuration.article_language">
+    </field>
+    <field name="article_genre" input-template="p.TextInput"
+           label="com.atex.plugins.sitemap.Configuration.article_genre">
+    </field>
   </input-template>
 </template-definition>

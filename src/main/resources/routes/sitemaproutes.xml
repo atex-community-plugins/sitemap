@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:camel="http://camel.apache.org/schema/spring"
+       xmlns:jee="http://www.springframework.org/schema/jee"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans.xsd
+                           http://www.springframework.org/schema/context
+                           http://www.springframework.org/schema/context/spring-context.xsd
+                           http://camel.apache.org/schema/spring
+                           http://camel.apache.org/schema/spring/camel-spring.xsd
+                           http://www.springframework.org/schema/jee
+                           http://www.springframework.org/schema/jee/spring-jee.xsd">
+
+  <bean id="sitemapGeneratorProcessor" class="com.atex.plugins.sitemap.processors.SitemapGeneratorProcessor" />
+
+  <!-- this is an included XML file where we only the the routeContext -->
+  <routeContext id="sitemapRoutes" xmlns="http://camel.apache.org/schema/spring">
+
+    <!-- see www.quartz-scheduler.org/documentation/quartz-2.x/tutorials/crontrigger for cron format -->
+    <route id="sitemapGeneratorCrontab" autoStartup="${sitemapGeneratorCrontab.startup}">
+      <from uri="quartz2://sitemapGeneratorScheduler?cron=${sitemapGeneratorCrontab.expression}"/>
+      <process ref="sitemapGeneratorProcessor" />
+    </route>
+
+  </routeContext>
+
+</beans>

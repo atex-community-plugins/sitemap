@@ -15,8 +15,11 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.atex.onecms.content.ContentManager;
+import com.atex.onecms.content.RepositoryClient;
 import com.google.common.base.Strings;
 import com.polopoly.application.Application;
+import com.polopoly.application.IllegalApplicationStateException;
 import com.polopoly.application.servlet.ApplicationServletUtil;
 import com.polopoly.cm.ExternalContentId;
 import com.polopoly.cm.client.CMException;
@@ -55,6 +58,7 @@ public class SitemapGeneratorServlet extends HttpServlet {
 
     private ServletContext servletContext;
     private CmClient cmClient;
+    private ContentManager contentManager;
     private SearchClient searchClient;
 
     @Override
@@ -65,6 +69,14 @@ public class SitemapGeneratorServlet extends HttpServlet {
         final Application application = ApplicationServletUtil.getApplication(servletContext);
         cmClient = (CmClient) application.getApplicationComponent(CmClientBase.DEFAULT_COMPOUND_NAME);
         searchClient = (SearchClient) application.getApplicationComponent(SolrSearchClient.DEFAULT_COMPOUND_NAME);
+
+        try {
+            final RepositoryClient repositoryClient = application.getPreferredApplicationComponent(RepositoryClient.class);
+            contentManager = repositoryClient.getContentManager();
+        } catch (IllegalApplicationStateException e) {
+            LOGGER.log(Level.SEVERE, e.getMessage(), e);
+            throw new ServletException(e);
+        }
     }
 
     @Override
@@ -76,7 +88,7 @@ public class SitemapGeneratorServlet extends HttpServlet {
             caller = login();
 
             final String dateParam = Strings.nullToEmpty(request.getParameter(REQ_PARAM_DATE)).trim();
-            final SitemapGenerator sitemapGenerator = new SitemapGenerator(getCMServer(), searchClient);
+            final SitemapGenerator sitemapGenerator = new SitemapGenerator(getCMServer(), contentManager, searchClient);
 
             if (!Strings.isNullOrEmpty(dateParam)) {
                 try {

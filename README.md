@@ -64,6 +64,8 @@ and the webapp-front web.xml:
   </servlet-mapping>
 ```
 
+The `sitemapGenerator` servlet is only needed of you are not using the camel processor.
+
 ## Plugin Configuration
 
 In your project you may want to change the default configuration by creating the file plugins.com.atex.plugins.sitemap.Config.content with the following content:
@@ -85,13 +87,42 @@ component:changefreq_page:value:hourly
 component:changefreq_content:value:monthly
 component:article_it:value:standard.Article
 component:gallery_it:value:com.atex.plugins.image-gallery.MainElement
-component:video_it:value:com.atex.plugins.video.MainElement
+component:video_it:value:com.atex.plugins.video.Video
+component:article_language:value:en
+component:article_genre:value:PressRelease
 ```
 
 The components article_it, gallery_it and video_it are a comma separated list of inputtemplates.
 The component sites is a comma separated list of site ids, if empty all the sites will be processed.
 
 ## Generate sitemaps
+
+There are two ways to create the sitemap, using a camel route or invoking the sitemapGenerator servlet.
+
+### Camel
+
+For camel you simply need to add to applicationContext.xml (in server-integration):
+
+```
+  <import resource="routes/sitemaproutes.xml" />
+  
+  <!-- the imports must be declared before the camel context -->
+  
+  <camelContext xmlns="http://camel.apache.org/schema/spring">
+  
+    <!-- just after the error handlers -->
+  
+    <routeContextRef ref="sitemapRoutes" />
+    
+    <!-- and before any routes -->
+    
+  </camelContext>
+```
+
+The sitemap processor will be called at 6 and 7 AM (and 5 minutes) and at 20 and 21 PM (and 5 minutes).
+
+### SitemapGenerator servlet
+If you want to use the sitemapGenerator servlet then you needs to follow the following instructions:  
 
 In order to create sitemaps you have to execute commands like:
 
@@ -155,3 +186,10 @@ Than you can setup a crontab with something like this:
 ```
 20 3,5 * * * /path/to/my/script/dailySitemap.sh 'curl http://localhost:8080/sitemapGenerator' | /bin/bash
 ```
+
+## Variants
+
+This plugins defines two variants: `NewsArticleSitemapBean` and `VideoSitemapBean`.
+You need to provide a mapper or a composer for such variants if you want to have the sitemap XML
+being generated automatically. As an alternative, the old approach on java interfaces is still
+supported, the equivalent are `NewsSitemapable` and `VideoSitemapable`.

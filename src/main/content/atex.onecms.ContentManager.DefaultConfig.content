@@ -1,0 +1,22 @@
+# NewArticle variant definition; declare identity mapping for NewsArticleSitemapBean
+id:com.atex.plugins.sitemap.newsarticle.variantconfig
+major:3
+inputtemplate:com.polopoly.data.Variant.config
+component:model:modelType:com.polopoly.data.mapping.VariantConfig
+component::defaultComposer:atex.onecms.ContentManager.ifMainAspectMapperThenIncludeMappedOnly
+component:composer:com.atex.plugins.sitemap.variant.NewsArticleSitemapBean:atex.onecms.ContentManager.identity
+
+# Video variant definition; declare identity mapping for VideoSitemapBean
+id:com.atex.plugins.sitemap.video.variantconfig
+major:3
+inputtemplate:com.polopoly.data.Variant.config
+component:model:modelType:com.polopoly.data.mapping.VariantConfig
+component::defaultComposer:atex.onecms.ContentManager.ifMainAspectMapperThenIncludeMappedOnly
+component:composer:com.atex.plugins.sitemap.variant.VideoSitemapBean:atex.onecms.ContentManager.identity
+
+# Put our variant in default config
+id:.
+major:3
+inputtemplate:com.atex.onecms.content.ContentManager.config
+component:variantMapping:com.atex.plugins.sitemap.newsarticle:com.atex.plugins.sitemap.newsarticle.variantconfig
+component:variantMapping:com.atex.plugins.sitemap.video:com.atex.plugins.sitemap.video.variantconfig

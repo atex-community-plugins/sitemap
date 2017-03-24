@@ -16,9 +16,6 @@ public class SitemapPolicy extends AspectedPolicy<SitemapContentDataBean> implem
 
     public static final String INPUT_TEMPLATE = "com.atex.plugins.sitemap.Sitemap";
 
-    /**
-     * @param cmClient needed for accessing the model domain.
-     */
     public SitemapPolicy(final CmClient cmClient, final Application application) throws IllegalApplicationStateException {
         super(cmClient, application);
     }

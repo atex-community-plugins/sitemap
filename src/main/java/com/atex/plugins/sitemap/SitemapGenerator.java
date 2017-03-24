@@ -7,6 +7,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.atex.onecms.content.ContentManager;
 import com.polopoly.cm.client.CMException;
 import com.polopoly.cm.policy.PolicyCMServer;
 import com.polopoly.search.solr.SearchClient;
@@ -24,14 +25,17 @@ public class SitemapGenerator {
 
     private final SitemapUtil sitemapUtil;
 
-    public SitemapGenerator(final PolicyCMServer cmServer, final SearchClient searchClient) {
-        this.sitemapUtil = new SitemapUtil(cmServer, searchClient);
+    public SitemapGenerator(final PolicyCMServer cmServer, final ContentManager contentManager, final SearchClient searchClient) {
+        this.sitemapUtil = new SitemapUtil(cmServer, contentManager, searchClient);
     }
 
     /**
-     * Generate normal sitemap for all sites & gather (all normal + department sitemaps) in an index sitemap
+     * Generate normal sitemap for all sites and gather (all normal + department sitemaps) in an index sitemap
      * Generate a new sitemap
      * Generate a video sitemap
+     *
+     * @return true if the sitemap was updated.
+     * @throws CMException if something goes wrong.
      */
     public boolean generateCurrentMonthSitemap()
             throws CMException {
@@ -62,6 +66,10 @@ public class SitemapGenerator {
 
     /*
      * Generate normal sitemaps of all sites for a particular month
+     *
+     * @param date the date to be generate
+     * @return true if the sitemap was generated
+     * @throws CMException if something goes wrong.
      */
     public boolean generateOtherMonthSitemap(final Date date)
             throws CMException {

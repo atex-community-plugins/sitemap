@@ -13,4 +13,6 @@ component:changefreq_page:value:hourly
 component:changefreq_content:value:monthly
 component:article_it:value:standard.Article
 component:gallery_it:value:com.atex.plugins.image-gallery.MainElement
-component:video_it:value:com.atex.plugins.video.MainElement
+component:video_it:value:com.atex.plugins.video.Video
+component:article_language:value:en
+component:article_genre:value:PressRelease

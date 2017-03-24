@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.logging.Level;
@@ -18,24 +19,38 @@ import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.SolrServerException;
-import org.jdom.Comment;
 import org.jdom.Document;
 import org.jdom.Element;
-import org.jdom.Namespace;
 import org.jdom.output.XMLOutputter;
 
-import com.google.common.base.Strings;
+import com.atex.onecms.content.ContentManager;
+import com.atex.onecms.content.ContentResult;
+import com.atex.onecms.content.ContentVersionId;
+import com.atex.onecms.content.IdUtil;
+import com.atex.onecms.content.Subject;
+import com.atex.onecms.ws.image.ImageServiceUrlBuilder;
+import com.atex.plugins.baseline.url.URLBuilder;
+import com.atex.plugins.baseline.url.URLBuilderCapabilities;
+import com.atex.plugins.baseline.url.URLBuilderLoader;
+import com.atex.plugins.sitemap.protocol.ChangeFrequency;
+import com.atex.plugins.sitemap.protocol.ElementNodeBuilder;
+import com.atex.plugins.sitemap.protocol.Namespaces;
+import com.atex.plugins.sitemap.protocol.NewsElementNodeBuilder;
+import com.atex.plugins.sitemap.protocol.UrlElementNodeBuilder;
+import com.atex.plugins.sitemap.protocol.UrlSetElementNodeBuilder;
+import com.atex.plugins.sitemap.protocol.VideoElementNodeBuilder;
+import com.atex.plugins.sitemap.variant.NewsArticleSitemapBean;
+import com.atex.plugins.sitemap.variant.VideoSitemapBean;
 import com.google.common.collect.Lists;
 import com.polopoly.cm.ContentId;
 import com.polopoly.cm.DefaultMajorNames;
 import com.polopoly.cm.ExternalContentId;
+import com.polopoly.cm.VersionedContentId;
 import com.polopoly.cm.client.CMException;
 import com.polopoly.cm.client.ContentRead;
-import com.polopoly.cm.path.PathSegment;
 import com.polopoly.cm.policy.ContentPolicy;
 import com.polopoly.cm.policy.Policy;
 import com.polopoly.cm.policy.PolicyCMServer;
-import com.polopoly.common.util.FriendlyUrlConverter;
 import com.polopoly.management.ServiceNotAvailableException;
 import com.polopoly.search.solr.SearchClient;
 import com.polopoly.search.solr.SearchResult;
@@ -44,6 +59,7 @@ import com.polopoly.search.solr.querydecorators.TimeStateFiltered;
 import com.polopoly.search.solr.querydecorators.UnderPage;
 import com.polopoly.search.solr.querydecorators.VisibleOnline;
 import com.polopoly.search.solr.querydecorators.WithDecorators;
+import com.polopoly.search.solr.querydecorators.WithInputTemplate;
 import com.polopoly.search.solr.schema.IndexFields;
 import com.polopoly.siteengine.structure.Page;
 import com.polopoly.siteengine.structure.Site;
@@ -55,14 +71,7 @@ import com.polopoly.siteengine.structure.Site;
  */
 public class SitemapUtil {
 
-    public static final ExternalContentId SITEMAP_INPUTTEMPLATE = new ExternalContentId(SitemapPolicy.INPUT_TEMPLATE);
-    public static final String PREFIX_EXTERNAL_SITEMAP_INDEX = "com.atex.plugins.sitemap.index.";
-    public static final String PREFIX_EXTERNAL_SITEMAP_NORMAL = "com.atex.plugins.sitemap.normal.";
-    public static final String PREFIX_EXTERNAL_SITEMAP_DEPARTMENT = "com.atex.plugins.sitemap.department.";
-    public static final String PREFIX_EXTERNAL_SITEMAP_NEWS = "com.atex.plugins.sitemap.news.";
-    public static final String PREFIX_EXTERNAL_SITEMAP_VIDEO = "com.atex.plugins.sitemap.video.";
-    public static final String FILENAME_XML = "file.xml";
-    private static final Logger logger = Logger.getLogger(SitemapUtil.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(SitemapUtil.class.getName());
     private static final ThreadLocal<SimpleDateFormat> YEARMONTH_FMT = new ThreadLocal<SimpleDateFormat>() {
         /**
          * See {@link ThreadLocal#initialValue()}
@@ -74,38 +83,44 @@ public class SitemapUtil {
         }
 
     };
-    private static final ThreadLocal<SimpleDateFormat> RFCDATE_FMT = new ThreadLocal<SimpleDateFormat>() {
-        /**
-         * See {@link ThreadLocal#initialValue()}
-         * @return a not null value.
-         */
-        @Override
-        protected SimpleDateFormat initialValue() {
-            return new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ssXXX");
-        }
 
-    };
+    private static final ExternalContentId SITEMAP_INPUTTEMPLATE = new ExternalContentId(SitemapPolicy.INPUT_TEMPLATE);
+    private static final String PREFIX_EXTERNAL_SITEMAP_INDEX = "com.atex.plugins.sitemap.index.";
+    private static final String PREFIX_EXTERNAL_SITEMAP_NORMAL = "com.atex.plugins.sitemap.normal.";
+    private static final String PREFIX_EXTERNAL_SITEMAP_DEPARTMENT = "com.atex.plugins.sitemap.department.";
+    private static final String PREFIX_EXTERNAL_SITEMAP_NEWS = "com.atex.plugins.sitemap.news.";
+    private static final String PREFIX_EXTERNAL_SITEMAP_VIDEO = "com.atex.plugins.sitemap.video.";
+    private static final String FILENAME_XML = "file.xml";
+
     private final PolicyCMServer cmServer;
+    private final ContentManager contentManager;
     private final SearchClient solrClient;
+    private final URLBuilder urlBuilder;
+    private final ImageUtil imageUtil;
     private SitemapConfigPolicy config;
 
-    public SitemapUtil(final PolicyCMServer cmServer, final SearchClient solrClient) {
+    public SitemapUtil(final PolicyCMServer cmServer, final ContentManager contentManager, final SearchClient solrClient) {
         this.cmServer = cmServer;
+        this.contentManager = contentManager;
         this.solrClient = solrClient;
         this.config = null;
+        this.urlBuilder = new URLBuilderLoader(cmServer, contentManager)
+                .create(URLBuilderCapabilities.WWW);
+        this.imageUtil = new ImageUtil(cmServer, contentManager);
     }
 
     private ContentId generateDepartmentSitemap(final ContentPolicy sitePolicy)
             throws CMException, IOException {
 
+        LOGGER.log(Level.INFO, "Generating department sitemap for " + sitePolicy.getContentId().getContentIdString());
+
         ExternalContentId externalContentId = new ExternalContentId(getExternalIdStringOfSitemap(SitemapType.Department,
                 sitePolicy.getExternalId().getExternalId(), null));
 
-        Document document = new Document();
-        Namespace ns = Namespace.getNamespace("http://www.sitemaps.org/schemas/sitemap/0.9");
-        Element urlset = new Element("urlset", ns);
-        Comment comment = new Comment("Department sitemap of " + externalContentId.getExternalId());
-        urlset.addContent(comment);
+        final Element urlset = new UrlSetElementNodeBuilder()
+                .comment("Department sitemap of " + externalContentId.getExternalId())
+                .build();
+        final Document document = new Document();
         document.setRootElement(urlset);
 
         List<Element> elementList = new ArrayList<>();
@@ -113,9 +128,9 @@ public class SitemapUtil {
 
         for (ContentRead content : pageOrSiteList) {
             try {
-                elementList.add(getSitemap((ContentPolicy) cmServer.getPolicy(content.getContentId()), ns));
+                elementList.add(getSitemap((ContentPolicy) cmServer.getPolicy(content.getContentId())));
             } catch (Exception e) {
-                logger.log(Level.SEVERE, "Could not generate department sitemap fragment for " +
+                LOGGER.log(Level.SEVERE, "Could not generate department sitemap fragment for " +
                         content.getContentId().getContentIdString());
             }
         }
@@ -126,72 +141,40 @@ public class SitemapUtil {
         return saveToFile(externalContentId, "Department Sitemap for " + sitePolicy.getName(), content, sitePolicy.getContentId());
     }
 
-    private String getArticleInputTemplates() throws CMException {
+    private WithInputTemplate withArticleInputTemplates() throws CMException {
         final SitemapConfigPolicy config = getConfig();
         final List<String> inputTemplates = config.getArticleInputTemplates();
         return getInputTemplatesQuery(inputTemplates);
     }
 
-    private String getGalleryInputTemplates() throws CMException {
+    private WithInputTemplate withGalleryInputTemplates() throws CMException {
         final SitemapConfigPolicy config = getConfig();
         final List<String> inputTemplates = config.getGalleryInputTemplates();
         return getInputTemplatesQuery(inputTemplates);
     }
 
-    private String getVideoInputTemplates() throws CMException {
+    private WithInputTemplate withVideoInputTemplates() throws CMException {
         final SitemapConfigPolicy config = getConfig();
         final List<String> inputTemplates = config.getVideoInputTemplates();
         return getInputTemplatesQuery(inputTemplates);
     }
 
-    private String getAllInputTemplates() throws CMException {
-        final SitemapConfigPolicy config = getConfig();
-        final List<String> inputTemplates = Lists.newArrayList();
-        inputTemplates.addAll(config.getArticleInputTemplates());
-        inputTemplates.addAll(config.getGalleryInputTemplates());
-        inputTemplates.addAll(config.getVideoInputTemplates());
-        return getInputTemplatesQuery(inputTemplates);
+    private WithInputTemplate getInputTemplatesQuery(final List<String> inputTemplates) {
+        return new WithInputTemplate(inputTemplates.toArray(new String[inputTemplates.size()]));
     }
 
-    private String getInputTemplatesQuery(final List<String> inputTemplates) {
-        final StringBuilder sb = new StringBuilder();
-        if (inputTemplates.size() > 0) {
-            if (inputTemplates.size() > 1) {
-                sb.append("(");
-            }
-            for (int idx = 0; idx < inputTemplates.size(); idx++) {
-                if (idx > 0) {
-                    sb.append(" OR ");
-                }
-                sb.append("(");
-                sb.append(IndexFields.INPUT_TEMPLATE);
-                sb.append(":");
-                sb.append(inputTemplates.get(idx));
-                sb.append(")");
-            }
-            if (inputTemplates.size() > 1) {
-                sb.append(")");
-            }
-        }
-        return sb.toString();
-    }
-
-    private ContentId generateNewsSitemap(final ContentPolicy sitePolicy)
-            throws CMException, SolrServerException, ServiceNotAvailableException, IOException {
+    private ContentId generateNewsSitemap(final ContentPolicy sitePolicy) throws CMException {
 
         ExternalContentId externalContentId =
                 new ExternalContentId(getExternalIdStringOfSitemap(SitemapType.News,
                         sitePolicy.getExternalId().getExternalId(), null));
 
-        // TODO: mnova, just changed to using decorator.
-        //SolrQuery query = new SolrQuery(getArticleInputTemplates() +
-        //        " AND ( page:" + sitePolicy.getContentId().getContentId().getContentIdString() + ")");
-        SolrQuery query = new SolrQuery(getArticleInputTemplates());
-        query = new WithDecorators(
-            new UnderPage(sitePolicy.getContentId().getContentId()),
-            new TimeStateFiltered(),
-            new VisibleOnline())
-                .decorate(query);
+        SolrQuery query = new WithDecorators(
+                withArticleInputTemplates(),
+                new UnderPage(sitePolicy.getContentId().getContentId()),
+                new TimeStateFiltered(),
+                new VisibleOnline())
+                .decorate(new SolrQuery("*:*"));
 
         Date endDate = DateUtil.getEndDateOfToday();
         Calendar calendar = Calendar.getInstance();
@@ -203,12 +186,11 @@ public class SitemapUtil {
         query.addSort("publishingDate", ORDER.desc);
         List<ContentId> contentIdList = getContentId(query, solrClient);
 
-        Document document = new Document();
-        Element urlset = new Element("urlset", "http://www.sitemaps.org/schemas/sitemap/0.9");
-        Namespace namespace = Namespace.getNamespace("news", "http://www.google.com/schemas/sitemap-news/0.9");
-        urlset.addNamespaceDeclaration(namespace);
-        Comment comment = new Comment("New sitemap of " + externalContentId.getExternalId());
-        urlset.addContent(comment);
+        final Element urlset = new UrlSetElementNodeBuilder()
+                .namespaces(Namespaces.NEWS)
+                .comment("News sitemap of " + externalContentId.getExternalId())
+                .build();
+        final Document document = new Document();
         document.setRootElement(urlset);
 
         // see https://support.google.com/news/publisher/answer/74288
@@ -220,8 +202,13 @@ public class SitemapUtil {
                 try {
                     urlset.addContent(((NewsSitemapable) policy).getNewsSitemap());
                 } catch (Exception e) {
-                    logger.log(Level.SEVERE, "Could not generate news sitemap fragment for " +
+                    LOGGER.log(Level.SEVERE, "Could not generate news sitemap fragment for " +
                             policy.getContentId().getContentIdString(), e);
+                }
+            } else {
+                final NewsArticleSitemapBean article = fetchNewsArticle(contentId, Subject.NOBODY_CALLER);
+                if (article != null && policy instanceof ContentPolicy) {
+                    urlset.addContent(createSitemapNodeFrom((ContentPolicy) policy, article));
                 }
             }
         }
@@ -231,26 +218,42 @@ public class SitemapUtil {
         return saveToFile(externalContentId, "News Sitemap for " + sitePolicy.getName(), content, sitePolicy.getContentId());
     }
 
-    private ContentId generateNormalSitemap(final ContentPolicy sitePolicy) throws CMException, SolrServerException,
-                                                                                   ServiceNotAvailableException,
-                                                                                   IOException {
+    private Element createSitemapNodeFrom(final ContentPolicy policy, final NewsArticleSitemapBean article)
+            throws CMException {
+
+        return ((NewsElementNodeBuilder) setupSitemapNodeBuilder(new NewsElementNodeBuilder(), policy))
+                .publicationName(getSiteNameForSitemap(policy.getContentId()))
+                .publicationLang(article.getLanguage())
+                .genres(article.getGenres())
+                .publicationDate(new Date(article.getPublishingDateTime()))
+                .title(article.getName())
+                .keywords(article.getKeywords())
+                .stockTickers(article.getStockTickers())
+                .build();
+    }
+
+    private String getSiteNameForSitemap(VersionedContentId versionedContentId) throws CMException{
+        Site sitePolicy = PolopolyUtil.getSiteFromContent(versionedContentId, getCMServer());
+        if (sitePolicy != null) {
+            return sitePolicy.getName();
+        }
+        return null;
+    }
+
+    private ContentId generateNormalSitemap(final ContentPolicy sitePolicy) throws CMException {
         return generateNormalSitemap(sitePolicy, new Date());
     }
 
-    private ContentId generateNormalSitemap(final ContentPolicy sitePolicy, final Date date) throws CMException,
-                                                                                                    SolrServerException,
-                                                                                                    ServiceNotAvailableException,
-                                                                                                    IOException {
+    private ContentId generateNormalSitemap(final ContentPolicy sitePolicy, final Date date) throws CMException {
 
-        // TODO: mnova, just changed to using decorator.
-        //SolrQuery query = new SolrQuery(getAllInputTemplates() +
-        //        " AND ( page:" + sitePolicy.getContentId().getContentId().getContentIdString() + ")");
-        SolrQuery query = new SolrQuery(getArticleInputTemplates());
-        query = new WithDecorators(
+        LOGGER.log(Level.INFO, "Generating article sitemap for " + sitePolicy.getContentId().getContentIdString());
+
+        SolrQuery query = new WithDecorators(
+                withArticleInputTemplates(),
                 new UnderPage(sitePolicy.getContentId().getContentId()),
                 new TimeStateFiltered(),
                 new VisibleOnline())
-                .decorate(query);
+                .decorate(new SolrQuery("*:*"));
 
         Date startDate = DateUtil.getStartDateOfMonth(date);
         Date endDate = DateUtil.getEndDateOfMonth(date);
@@ -262,11 +265,10 @@ public class SitemapUtil {
         ExternalContentId externalContentId = new ExternalContentId(getExternalIdStringOfSitemap(SitemapType.Normal,
                 sitePolicy.getExternalId().getExternalId(), startDate));
 
-        Document document = new Document();
-        Namespace ns = Namespace.getNamespace("http://www.sitemaps.org/schemas/sitemap/0.9");
-        Element urlset = new Element("urlset", ns);
-        Comment comment = new Comment("Normal sitemap of " + externalContentId.getExternalId());
-        urlset.addContent(comment);
+        final Element urlset = new UrlSetElementNodeBuilder()
+                .comment("Normal sitemap of " + externalContentId.getExternalId())
+                .build();
+        final Document document = new Document();
         document.setRootElement(urlset);
 
         for (ContentId contentId : contentIdList) {
@@ -274,14 +276,14 @@ public class SitemapUtil {
 
             if (policy instanceof Sitemapable) {
                 try {
-                    urlset.addContent(((Sitemapable) policy).getSitemap(ns));
+                    urlset.addContent(((Sitemapable) policy).getSitemap(Namespaces.SITEMAP.ns()));
 
                 } catch (Exception e) {
-                    logger.log(Level.SEVERE, "Could not generate normal sitemap fragment for " +
+                    LOGGER.log(Level.SEVERE, "Could not generate normal sitemap fragment for " +
                             policy.getContentId().getContentIdString(), e);
                 }
             } else {
-                final Element sitemapElement = getSitemap((ContentPolicy) policy, ns);
+                final Element sitemapElement = getSitemap((ContentPolicy) policy);
                 if (sitemapElement != null) {
                     urlset.addContent(sitemapElement);
                 }
@@ -300,9 +302,9 @@ public class SitemapUtil {
         for (Site sitePolicy : sitePolicies) {
             try {
                 generateVideoSitemap((ContentPolicy) sitePolicy);
-            } catch (CMException | SolrServerException | ServiceNotAvailableException | IOException e) {
+            } catch (CMException e) {
                 success = false;
-                logger.log(Level.SEVERE, "Failed to generate a department sitemap for " + sitePolicy.getName(), e);
+                LOGGER.log(Level.SEVERE, "Failed to generate a video sitemap for " + sitePolicy.getName(), e);
             }
         }
         return success;
@@ -326,21 +328,19 @@ public class SitemapUtil {
         return sitePolicies;
     }
 
-    private ContentId generateVideoSitemap(final ContentPolicy sitePolicy) throws CMException, SolrServerException,
-                                                                                  ServiceNotAvailableException,
-                                                                                  IOException {
+    private ContentId generateVideoSitemap(final ContentPolicy sitePolicy) throws CMException {
+
+        LOGGER.log(Level.INFO, "Generating video sitemap for " + sitePolicy.getContentId().getContentIdString());
+
         ExternalContentId externalContentId = new ExternalContentId(getExternalIdStringOfSitemap(SitemapType.Video,
                 sitePolicy.getExternalId().getExternalId(), null));
 
-        // TODO: mnova, just changed to using decorator.
-        //SolrQuery query = new SolrQuery(getVideoInputTemplates() +
-        //        " AND (page:" + sitePolicy.getContentId().getContentId().getContentIdString() + ")");
-        SolrQuery query = new SolrQuery(getVideoInputTemplates());
-        query = new WithDecorators(
+        SolrQuery query = new WithDecorators(
+                withVideoInputTemplates(),
                 new UnderPage(sitePolicy.getContentId().getContentId()),
                 new TimeStateFiltered(),
                 new VisibleOnline())
-                .decorate(query);
+                .decorate(new SolrQuery("*:*"));
 
         Date endDate = DateUtil.getEndDateOfToday();
         Calendar calendar = Calendar.getInstance();
@@ -354,12 +354,11 @@ public class SitemapUtil {
 
         List<ContentId> contentIdList = getContentId(query, solrClient);
 
-        Document document = new Document();
-        Element urlset = new Element("urlset", "http://www.sitemaps.org/schemas/sitemap/0.9");
-        Namespace namespace = Namespace.getNamespace("video", "http://www.google.com/schemas/sitemap-video/1.1");
-        urlset.addNamespaceDeclaration(namespace);
-        Comment comment = new Comment("Video sitemap of " + externalContentId.getExternalId());
-        urlset.addContent(comment);
+        final Element urlset = new UrlSetElementNodeBuilder()
+                .namespaces(Namespaces.VIDEO)
+                .comment("Video sitemap of " + externalContentId.getExternalId())
+                .build();
+        final Document document = new Document();
         document.setRootElement(urlset);
 
         for (ContentId contentId : contentIdList) {
@@ -369,8 +368,13 @@ public class SitemapUtil {
                 try {
                     urlset.addContent(((VideoSitemapable) policy).getVideoSitemap());
                 } catch (Exception e) {
-                    logger.log(Level.SEVERE, "Could not generate video sitemap fragment for " +
+                    LOGGER.log(Level.SEVERE, "Could not generate video sitemap fragment for " +
                             policy.getContentId().getContentIdString(), e);
+                }
+            } else {
+                final VideoSitemapBean video = fetchVideo(contentId, Subject.NOBODY_CALLER);
+                if (video != null && policy instanceof ContentPolicy) {
+                    urlset.addContent(createSitemapNodeFrom((ContentPolicy) policy, video));
                 }
             }
         }
@@ -380,16 +384,76 @@ public class SitemapUtil {
         return saveToFile(externalContentId, "Video sitemap for " + sitePolicy.getName(), content, sitePolicy.getContentId());
     }
 
+    private Element createSitemapNodeFrom(final ContentPolicy policy, final VideoSitemapBean video)
+            throws CMException {
+
+        final Site sitePolicy = PolopolyUtil.getSiteFromContent(policy.getContentId(), getCMServer());
+        final String siteUrl = PolopolyUtil.getMainAlias(sitePolicy);
+
+        String mediaUrl = video.getMediaUrl();
+        if (mediaUrl != null) {
+            if (mediaUrl.startsWith("/") || mediaUrl.toLowerCase().startsWith("http://localhost:8080")) {
+                String url = siteUrl;
+                if (url != null) {
+                    if (url.endsWith("/")) {
+                        url = url.substring(0, url.length() - 1);
+                    }
+                    if (mediaUrl.toLowerCase().startsWith("http://localhost:8080/")) {
+                        mediaUrl = url + mediaUrl.substring(21);
+                    } else {
+                        mediaUrl = url + mediaUrl;
+                    }
+                }
+            }
+        }
+
+        String thumbnailUrl = null;
+        if (video.getImageContentId() != null) {
+            final ImageServiceUrlBuilder imageUrlBuilder = imageUtil.getUrlBuilder(video.getImageContentId());
+            if (imageUrlBuilder != null) {
+                thumbnailUrl = imageUrlBuilder.buildUrl();
+                if (thumbnailUrl.startsWith("/")) {
+                    if (siteUrl != null) {
+                        if (siteUrl.endsWith("/")) {
+                            thumbnailUrl = siteUrl.substring(0, siteUrl.length() - 1) + thumbnailUrl;
+                        } else {
+                            thumbnailUrl = siteUrl + thumbnailUrl;
+                        }
+                    }
+                }
+            }
+        }
+
+        return ((VideoElementNodeBuilder) setupSitemapNodeBuilder(new VideoElementNodeBuilder(), policy))
+                .title(video.getTitle())
+                .description(video.getDescription())
+                .thumbnailUrl(thumbnailUrl)
+                .mediaUrl(mediaUrl)
+                .mediaPlayerUrl(video.getMediaPlayerUrl())
+                .duration(video.getDuration())
+                .rating(video.getRating())
+                .tag(video.getTag())
+                .category(video.getCategory())
+                .countryRestriction(video.getCountryRestriction())
+                .publicationDate(video.getPublicationDate())
+                .expirationDate(video.getExpirationDate())
+                .build();
+    }
+
     private ContentId generateIndexSitemap(final ContentPolicy sitePolicy, List<ContentId> sitemapContentIdList)
             throws CMException, IOException {
-        ExternalContentId externalContentId = new ExternalContentId(getExternalIdStringOfSitemap(SitemapType.Index,
+
+        LOGGER.log(Level.INFO, "Generating index sitemap for " + sitePolicy.getContentId().getContentIdString());
+
+        final ExternalContentId externalContentId = new ExternalContentId(getExternalIdStringOfSitemap(SitemapType.Index,
                 sitePolicy.getExternalId().getExternalId(), null));
 
-        Document document = new Document();
-        Namespace ns = Namespace.getNamespace("http://www.sitemaps.org/schemas/sitemap/0.9");
-        Element sitemapindex = new Element("sitemapindex", ns);
-        Comment comment = new Comment("Index sitemap of " + externalContentId.getExternalId());
-        sitemapindex.addContent(comment);
+        final Document document = new Document();
+        final Element sitemapindex = new ElementNodeBuilder()
+                .rootName("sitemapindex")
+                .namespaces(Namespaces.SITEMAP)
+                .comment("Index sitemap of " + externalContentId.getExternalId())
+                .build();
         document.setRootElement(sitemapindex);
 
         for (ContentId contentId : sitemapContentIdList) {
@@ -398,27 +462,16 @@ public class SitemapUtil {
             if (policy instanceof SitemapPolicy) {
 
                 try {
-                    Element sitemap = new Element("sitemap", ns);
+                    final Element sitemap = new UrlElementNodeBuilder()
+                            .url(getURLofFile(PolopolyUtil.getMainAlias((Site) sitePolicy), (SitemapPolicy) policy))
+                            .lastModified(((ContentPolicy) policy).getVersionInfo().getVersionCommitDate())
+                            .rootName("sitemap")
+                            .comment("link to " +
+                                    ((SitemapPolicy) policy).getExternalId().getExternalId())
+                            .build();
                     sitemapindex.addContent(sitemap);
-
-                    Comment commentOfSitemap = new Comment("link to " +
-                            ((SitemapPolicy) policy).getExternalId().getExternalId());
-                    sitemap.addContent(commentOfSitemap);
-
-                    Element loc = new Element("loc", ns);
-                    loc.setText(getURLofFile(PolopolyUtil.getMainAlias((Site) sitePolicy), (SitemapPolicy) policy));
-                    sitemap.addContent(loc);
-
-                    // using last modified.
-                    final long version = policy.getContentId().getVersion();
-                    final Date lastModified = new Date(version * 1000);
-
-                    Element lastmod = new Element("lastmod", ns);
-                    lastmod.setText(RFCDATE_FMT.get().format(lastModified));
-                    sitemap.addContent(lastmod);
-
                 } catch (Exception e) {
-                    logger.log(Level.SEVERE, "Could not generate index sitemap fragment for " +
+                    LOGGER.log(Level.SEVERE, "Could not generate index sitemap fragment for " +
                             policy.getContentId().getContentIdString(), e);
                 }
             }
@@ -429,12 +482,17 @@ public class SitemapUtil {
         return saveToFile(externalContentId, "Index Sitemap for " + sitePolicy.getName(), content, sitePolicy.getContentId());
     }
 
-    private List<ContentId> getContentId(SolrQuery query, SearchClient solrClient)
-            throws SolrServerException, ServiceNotAvailableException {
-        logger.log(Level.INFO, query.getQuery());
-        SearchResult result = solrClient.search(query, 50000);
-        SearchResultPage resultPage = result.getPage(0);
-        return resultPage.getHits();
+    private List<ContentId> getContentId(SolrQuery query, SearchClient solrClient) throws CMException {
+
+        LOGGER.log(Level.FINE, query.getQuery());
+
+        try {
+            SearchResult result = solrClient.search(query, 50000);
+            SearchResultPage resultPage = result.getPage(0);
+            return resultPage.getHits();
+        } catch (SolrServerException | ServiceNotAvailableException e) {
+            throw new CMException(e);
+        }
     }
 
     private String getExternalIdStringOfSitemap(SitemapType sitemapType, String siteExternalIdString, Date date) {
@@ -477,24 +535,37 @@ public class SitemapUtil {
                     contentIdList.add(departmentSitemapContentId);
                 } catch (CMException | IOException e) {
                     success = false;
-                    logger.log(Level.SEVERE, "Failed to generate a department sitemap for " + sitePolicy.getName(), e);
+                    LOGGER.log(Level.SEVERE, "Failed to generate a department sitemap for " + sitePolicy.getName(), e);
                 }
 
                 //Generate latest month sitemap
-                /*try {
-                    generateNormalSitemap(sitePolicy, cmServer, solrClient);
-                } catch (CMException | IOException | SolrServerException | ServiceNotAvailableException e) {
+                try {
+                    generateNormalSitemap((ContentPolicy) sitePolicy);
+                } catch (CMException e) {
                     success = false;
-                    logger.log(Level.SEVERE, "Failed to generate a current normal sitemap for " + sitePolicy.getName(), e);
+                    LOGGER.log(Level.SEVERE, "Failed to generate a current normal sitemap for " + sitePolicy.getName(), e);
                 }
-                */
+
+                try {
+                    generateNewsSitemap((ContentPolicy) sitePolicy);
+                } catch (CMException e) {
+                    success = false;
+                    LOGGER.log(Level.SEVERE, "Failed to generate a current news sitemap for " + sitePolicy.getName(), e);
+                }
+
+                try {
+                    generateVideoSitemap((ContentPolicy) sitePolicy);
+                } catch (CMException e) {
+                    success = false;
+                    LOGGER.log(Level.SEVERE, "Failed to generate a current video sitemap for " + sitePolicy.getName(), e);
+                }
 
                 // Get all other months sitemap
                 try {
                     contentIdList.addAll(getAllMonthSitemap((ContentPolicy) sitePolicy));
-                } catch (CMException | SolrServerException | ServiceNotAvailableException e) {
+                } catch (CMException e) {
                     success = false;
-                    logger.log(Level.SEVERE, "Failed to get normal monthly sitemap for " + sitePolicy.getName(), e);
+                    LOGGER.log(Level.SEVERE, "Failed to get normal monthly sitemap for " + sitePolicy.getName(), e);
                 }
 
                 // Generate index
@@ -502,7 +573,7 @@ public class SitemapUtil {
 
             } catch (CMException | IOException e) {
                 success = false;
-                logger.log(Level.SEVERE, "Failed to generate an index sitemap for " + sitePolicy.getName(), e);
+                LOGGER.log(Level.SEVERE, "Failed to generate an index sitemap for " + sitePolicy.getName(), e);
             }
         }
         return success;
@@ -518,9 +589,9 @@ public class SitemapUtil {
             try {
                 generateNewsSitemap((ContentPolicy) sitePolicy);
 
-            } catch (CMException | IOException | SolrServerException | ServiceNotAvailableException e) {
+            } catch (CMException e) {
                 success = false;
-                logger.log(Level.SEVERE, "Failed to generate a news sitemap for " + sitePolicy.getName(), e);
+                LOGGER.log(Level.SEVERE, "Failed to generate a news sitemap for " + sitePolicy.getName(), e);
             }
         }
         return success;
@@ -531,21 +602,20 @@ public class SitemapUtil {
         final List<Site> sitePolicies = getAllSites();
 
         for (Site sitePolicy : sitePolicies) {
-            //List<ContentId> contentIdList = new ArrayList<>();
-            //Generate latest month sitemap
+            // Generate latest month sitemap
             try {
                 generateNormalSitemap((ContentPolicy) sitePolicy, date);
-
-            } catch (CMException | IOException | SolrServerException | ServiceNotAvailableException e) {
-                logger.log(Level.SEVERE, "Failed to generate a normal sitemap for a month " + sitePolicy.getName() +
+            } catch (CMException e) {
+                LOGGER.log(Level.SEVERE, "Failed to generate a normal sitemap for a month " + sitePolicy.getName() +
                         " date: " + date, e);
             }
         }
     }
 
-    public List<ContentId> getAllMonthSitemap(final ContentPolicy sitePolicy) throws SolrServerException,
-                                                                                     ServiceNotAvailableException,
-                                                                                     CMException {
+    public List<ContentId> getAllMonthSitemap(final ContentPolicy sitePolicy) throws CMException {
+
+        LOGGER.log(Level.INFO, "Generating all months sitemap for " + sitePolicy.getContentId().getContentIdString());
+
         SolrQuery query = new SolrQuery(String.format("(%s:com.atex.plugins.sitemap.Sitemap)", IndexFields.INPUT_TEMPLATE));
         List<ContentId> contentIds = getContentId(query, solrClient);
         List<ContentId> temp = new ArrayList<>();
@@ -570,108 +640,36 @@ public class SitemapUtil {
         return temp;
     }
 
-    /**
-     * Generate an xml like this:
-     * <p/>
-     * <url>
-     * <loc>http://www.example.com/</loc>
-     * <lastmod>2005-01-01</lastmod>
-     * <changefreq>monthly</changefreq>
-     * <priority>0.8</priority>
-     * </url>
-     *
-     * @param contentPolicy
-     * @param ns
-     * @return
-     * @throws CMException
-     */
-    private Element getSitemap(final ContentPolicy contentPolicy, Namespace ns)
-            throws CMException {
+    private Element getSitemap(final ContentPolicy contentPolicy) throws CMException {
+        return setupSitemapNodeBuilder(new UrlElementNodeBuilder(), contentPolicy).build();
+    }
 
-        final Element url = new Element("url", ns);
-
-        final Element loc = new Element("loc", ns);
-        url.addContent(loc);
-        loc.setText(getCanonicalUrl(contentPolicy));
-
-        // using last modified instead of getVersionInfo to speed up resolution.
-        final long version = contentPolicy.getContentId().getVersion();
-        final Date lastModified = new Date(version * 1000);
-
-        Element lastmod = new Element("lastmod", ns);
-        url.addContent(lastmod);
-        lastmod.setText(RFCDATE_FMT.get().format(lastModified));
-
-        final Element changeFreq = new Element("changefreq", ns);
-        url.addContent(changeFreq);
-
-        final Element priority = new Element("priority", ns);
-        url.addContent(priority);
-
+    private UrlElementNodeBuilder setupSitemapNodeBuilder(final UrlElementNodeBuilder sourceNodeBuilder, final ContentPolicy contentPolicy) throws CMException {
+        final UrlElementNodeBuilder nodeBuilder = sourceNodeBuilder
+                .url(getCanonicalUrl(contentPolicy))
+                .lastModified(contentPolicy.getVersionInfo().getVersionCommitDate());
         final SitemapConfigPolicy config = getConfig();
 
         if (contentPolicy instanceof Site) {
-            priority.setText(config.getPrioritySite());
-            changeFreq.setText(config.getChangeFreqSite());
+            return nodeBuilder.priority(Double.parseDouble(config.getPrioritySite()))
+                              .changeFrequency(ChangeFrequency.from(config.getChangeFreqSite()));
         } else if (contentPolicy instanceof Page) {
-            priority.setText(config.getPriorityPage());
-            changeFreq.setText(config.getChangeFreqPage());
+            return nodeBuilder.priority(Double.parseDouble(config.getPriorityPage()))
+                              .changeFrequency(ChangeFrequency.from(config.getChangeFreqPage()));
         } else {
-            priority.setText(config.getPriorityContent());
-            changeFreq.setText(config.getChangeFreqContent());
+            return nodeBuilder.priority(Double.parseDouble(config.getPriorityContent()))
+                              .changeFrequency(ChangeFrequency.from(config.getChangeFreqContent()));
         }
-
-        return url;
     }
 
     private String getCanonicalUrl(final ContentPolicy contentPolicy) throws CMException {
-
-        String url = "";
-
-        if (contentPolicy instanceof Site) {
-            url = PolopolyUtil.getMainAlias((Site) contentPolicy);
-        } else if (contentPolicy instanceof Page) {
-            Site sitePolicy = PolopolyUtil.getSiteFromContent(contentPolicy.getContentId(), cmServer);
-            url = PolopolyUtil.getMainAlias(sitePolicy) + "/" + getUriForPage(contentPolicy, 0);
-        } else {
-            final ContentId parentId = contentPolicy.getSecurityParentId();
-            try {
-                final ContentPolicy parentPolicy = (ContentPolicy) cmServer.getPolicy(parentId.getContentId());
-                url = getCanonicalUrl(parentPolicy);
-            } catch (CMException e) {
-                logger.log(Level.SEVERE, "cannot resolve " + parentId.getContentIdString() + ": " + e.getMessage());
-            }
-            url += String.format("/%s-%s",
-                    FriendlyUrlConverter.convert(contentPolicy.getName()),
-                    contentPolicy.getContentId().getContentId().getContentIdString());
-        }
-
-        return Strings.nullToEmpty(url).toLowerCase();
+        return urlBuilder.buildUrl(contentPolicy.getContentId());
     }
 
-    private String getUriForPage(final ContentPolicy pagePolicy, int level) throws CMException {
-        level++;
-
-        if (level > 10) {
-            throw new RuntimeException("Maximum page depth reached");
-        }
-        String uri = "";
-        if (pagePolicy instanceof PathSegment) {
-            uri = ((PathSegment) pagePolicy).getPathSegmentString();
-        }
-
-        if (pagePolicy.getSecurityParentId() != null) {
-            Policy policy = cmServer.getPolicy(pagePolicy.getSecurityParentId());
-
-            if (policy instanceof Page && !(policy instanceof Site)) {
-                return getUriForPage((ContentPolicy) policy, level) + "/" + uri;
-            }
-        }
-        return uri;
-    }
-
-    public ContentId saveToFile(ExternalContentId externalId, String name, String content, final ContentId securityParentId)
-            throws CMException, IOException {
+    private ContentId saveToFile(final ExternalContentId externalId,
+                                 final String name,
+                                 final String content,
+                                 final ContentId securityParentId) throws CMException {
 
         SitemapPolicy policy = null;
 
@@ -697,22 +695,22 @@ public class SitemapUtil {
                 IOUtils.closeQuietly(is);
             }
             cmServer.commitContent(policy);
-            logger.log(Level.INFO, "Successfully generated sitemap " + externalId);
+            LOGGER.log(Level.INFO, "Successfully generated sitemap " + externalId);
         } catch (CMException | IOException e) {
-            logger.log(Level.SEVERE, "cannot save sitemap " + name, e);
+            LOGGER.log(Level.SEVERE, "cannot save sitemap " + name, e);
             if (policy != null) {
                 try {
                     cmServer.abortContent(policy);
                 } catch (CMException e1) {
-                    logger.log(Level.SEVERE, e1.getMessage(), e1);
+                    LOGGER.log(Level.SEVERE, e1.getMessage(), e1);
                 }
             }
-            throw e;
+            throw new CMException(e);
         }
         return policy.getContentId();
     }
 
-    // TODO: mnova
+    // TODO: mnova review this code.
     private String getURLofFile(String domain, SitemapPolicy fileResourcePolicy) {
         return domain + "/polopoly_fs/" + fileResourcePolicy.getContentId().getContentIdString() + "!/" + FILENAME_XML;
     }
@@ -720,30 +718,27 @@ public class SitemapUtil {
     public InputStream getURLofSitemap(final HttpServletRequest request) throws Exception {
         String domain = PolopolyUtil.getRequestDomain(request);
 
-        // TODO: mnova
+        // TODO: mnova review this code.
         try {
-            ContentPolicy sitePolicy = (ContentPolicy) PolopolyUtil.getSiteFromDomain(domain, cmServer);
-            String externalIdString;
-            String requestUri = request.getRequestURI();
+            final ContentPolicy sitePolicy = (ContentPolicy) PolopolyUtil.getSiteFromDomain(domain, cmServer);
+            final String requestUri = request.getRequestURI();
 
-            if (requestUri.indexOf("sitemap_index.xml") >= 0) {
-                externalIdString =
-                        getExternalIdStringOfSitemap(SitemapType.Index, sitePolicy.getExternalId()
-                                                                                  .getExternalId(), null);
+            final SitemapType sitemapType;
 
-            } else if (requestUri.indexOf("sitemap_news.xml") >= 0) {
-                externalIdString =
-                        getExternalIdStringOfSitemap(SitemapType.News, sitePolicy.getExternalId()
-                                                                                 .getExternalId(), null);
-            } else if (requestUri.indexOf("sitemap_video.xml") >= 0) {
-                externalIdString =
-                        getExternalIdStringOfSitemap(SitemapType.Video, sitePolicy.getExternalId()
-                                                                                  .getExternalId(), null);
+            if (requestUri.contains("sitemap_index.xml")) {
+                sitemapType = SitemapType.Index;
+            } else if (requestUri.contains("sitemap_news.xml")) {
+                sitemapType = SitemapType.News;
+            } else if (requestUri.contains("sitemap_video.xml")) {
+                sitemapType = SitemapType.Video;
             } else {
-                externalIdString =
-                        getExternalIdStringOfSitemap(SitemapType.Index, sitePolicy.getExternalId()
-                                                                                  .getExternalId(), null);
+                sitemapType = SitemapType.Index;
             }
+            final String externalIdString = getExternalIdStringOfSitemap(
+                    sitemapType,
+                    sitePolicy.getExternalId()
+                              .getExternalId(),
+                    null);
 
             SitemapPolicy policy = (SitemapPolicy) cmServer.getPolicy(new ExternalContentId(externalIdString));
 
@@ -751,10 +746,10 @@ public class SitemapUtil {
                 return policy.getFileStream(FILENAME_XML);
             }
 
-            logger.log(Level.SEVERE, "Could not get sitemap: " + request.getRequestURL());
+            LOGGER.log(Level.SEVERE, "Could not get sitemap: " + request.getRequestURL());
             throw new IllegalArgumentException("Could not get sitemap: " + request.getRequestURL());
         } catch (CMException | IOException e) {
-            logger.log(Level.SEVERE, "Could not get sitemap: " + request.getRequestURL(), e);
+            LOGGER.log(Level.SEVERE, "Could not get sitemap: " + request.getRequestURL(), e);
             throw e;
         }
     }
@@ -766,6 +761,96 @@ public class SitemapUtil {
         return config;
     }
 
+    private PolicyCMServer getCMServer() {
+        return cmServer;
+    }
+
+    private ContentManager getContentManager() {
+        return contentManager;
+    }
+
+    private SearchClient getSolrClient() {
+        return solrClient;
+    }
+
+    private NewsArticleSitemapBean fetchNewsArticle(final ContentId contentId, final Subject subject) {
+        return fetchNewsArticle(IdUtil.fromPolicyContentId(contentId), subject);
+    }
+
+    private NewsArticleSitemapBean fetchNewsArticle(final com.atex.onecms.content.ContentId contentId,
+                                                    final Subject subject) {
+        return fetch(contentId, NewsArticleSitemapBean.VARIANT_NAME, NewsArticleSitemapBean.class, subject);
+        /*
+        final ContentManager contentManager = getContentManager();
+        ContentVersionId versionedId = contentManager.resolve(contentId, subject);
+        NewsArticleSitemapBean info = null;
+        if (versionedId != null) {
+            ContentResult<NewsArticleSitemapBean> result = contentManager.get(versionedId,
+                    NewsArticleSitemapBean.VARIANT_NAME,
+                    NewsArticleSitemapBean.class,
+                    Collections.emptyMap(),
+                    subject);
+            if (result.getStatus().isSuccess()) {
+                info = result.getContent().getContentData();
+            } else {
+                if (LOGGER.isLoggable(Level.FINE)) {
+                    LOGGER.log(Level.FINE,
+                            String.format(
+                                    "Tried to fetch %s with variant %s but ContentManager result was %d.",
+                                    IdUtil.toVersionedIdString(versionedId),
+                                    NewsArticleSitemapBean.VARIANT_NAME,
+                                    result.getStatus().getDetailCode()));
+                }
+            }
+        } else {
+            LOGGER.log(Level.WARNING, "Could not resolve to versioned id: "
+                    + IdUtil.toIdString(contentId));
+        }
+        return info;
+        */
+    }
+
+    private VideoSitemapBean fetchVideo(final ContentId contentId, final Subject subject) {
+        return fetchVideo(IdUtil.fromPolicyContentId(contentId), subject);
+    }
+
+    private VideoSitemapBean fetchVideo(final com.atex.onecms.content.ContentId contentId,
+                                        final Subject subject) {
+        return fetch(contentId, VideoSitemapBean.VARIANT_NAME, VideoSitemapBean.class, subject);
+    }
+
+    private <T> T fetch(final com.atex.onecms.content.ContentId contentId,
+                        final String variantName,
+                        final Class<T> variantClass,
+                        final Subject subject) {
+
+        final ContentManager contentManager = getContentManager();
+        final ContentVersionId versionedId = contentManager.resolve(contentId, subject);
+        if (versionedId != null) {
+            final ContentResult<T> result = contentManager.get(versionedId,
+                    variantName,
+                    variantClass,
+                    Collections.emptyMap(),
+                    subject);
+            if (result.getStatus().isSuccess()) {
+                return result.getContent().getContentData();
+            } else {
+                if (LOGGER.isLoggable(Level.FINE)) {
+                    LOGGER.log(Level.FINE,
+                            String.format(
+                                    "Tried to fetch %s with variant %s but ContentManager result was %d.",
+                                    IdUtil.toVersionedIdString(versionedId),
+                                    variantName,
+                                    result.getStatus().getDetailCode()));
+                }
+            }
+        } else {
+            LOGGER.log(Level.WARNING, "Could not resolve to versioned id: "
+                    + IdUtil.toIdString(contentId));
+        }
+        return null;
+
+    }
 
     enum SitemapType {
         Index,
