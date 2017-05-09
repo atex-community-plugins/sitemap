@@ -36,18 +36,19 @@ public class SitemapGeneratorProcessor extends BaseProcessor implements Processo
 
     };
 
+    private static final Object lock = new Object();
     private static boolean processing = false;
 
     @Override
     public void process(final Exchange exchange) throws Exception {
 
-        if (processing) {
+        if (isProcessing()) {
             LOGGER.log(Level.WARNING, "already processing");
             return;
         }
 
         try {
-            processing = true;
+            setProcessing(true);
 
             LOG.log(Level.INFO, "start processing sitemap generation");
 
@@ -67,10 +68,30 @@ public class SitemapGeneratorProcessor extends BaseProcessor implements Processo
                 }
             }
 
+        } catch (Exception e) {
+
+            LOG.log(Level.SEVERE, "error while processing sitemap generation: " + e.getMessage(), e);
+
+            throw new Exception(e);
         } finally {
-            processing = false;
+
+            LOG.log(Level.INFO, "end processing sitemap generation");
+
+            setProcessing(false);
         }
 
+    }
+
+    private static boolean isProcessing() {
+        synchronized (lock) {
+            return processing;
+        }
+    }
+
+    private static void setProcessing(final boolean value) {
+        synchronized (lock) {
+            processing = value;
+        }
     }
 
     private void login() throws Exception {
