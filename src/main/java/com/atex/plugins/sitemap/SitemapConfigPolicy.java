@@ -126,18 +126,4 @@ public class SitemapConfigPolicy extends BaselinePolicy implements LegacyContent
             setChildValue(ARTICLE_GENRE, bean.getArticleGenre());
         }
     }
-
-    private void setChildValue(final String name, final String value) throws CMException {
-        try {
-            final SingleValued child = (SingleValued) getChildPolicy(name);
-            if (child != null) {
-                child.setValue(value);
-            }
-        } catch (ClassCastException cce) {
-            logger.log(Level.WARNING, name + " in " + getContentId() + " has unsupported policy.");
-        } catch (Exception e) {
-            logger.log(Level.WARNING, "Error getting child value", e);
-        }
-    }
-
 }
