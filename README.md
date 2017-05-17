@@ -14,53 +14,9 @@ You will need to modify the webapp-dispatcher web.xml:
     <servlet-class>com.atex.plugins.sitemap.SitemapGeneratorServlet</servlet-class>
   </servlet>
 
-  <servlet>
-    <servlet-name>sitemapRead</servlet-name>
-    <servlet-class>com.atex.plugins.sitemap.SitemapReadServlet</servlet-class>
-  </servlet>
-
   <servlet-mapping>
     <servlet-name>sitemapGenerator</servlet-name>
     <url-pattern>/sitemapGenerator</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_news.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_video.xml</url-pattern>
-  </servlet-mapping>
-```
-
-and the webapp-front web.xml:
-
-```
-  <servlet>
-    <servlet-name>sitemapRead</servlet-name>
-    <servlet-class>com.atex.plugins.sitemap.SitemapReadServlet</servlet-class>
-  </servlet>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_news.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_video.xml</url-pattern>
   </servlet-mapping>
 ```
 
