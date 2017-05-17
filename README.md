@@ -152,7 +152,7 @@ supported, the equivalent are `NewsSitemapable` and `VideoSitemapable`.
 
 ## Upgrade notes
 
-#### 1.5 
+#### 1.2 
 
 * SitemapReadServlet is now added as web-fragment. Remove the following rows from webapp-dispatcher and front web.xml if upgrading from previous version 
 
