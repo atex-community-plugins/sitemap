@@ -712,6 +712,9 @@ public class SitemapUtil {
 
     // TODO: mnova review this code.
     private String getURLofFile(String domain, SitemapPolicy fileResourcePolicy) {
+        if (domain == null || domain.isEmpty()) {
+            domain = "http://localhost:8080";
+        }
         return domain + "/polopoly_fs/" + fileResourcePolicy.getContentId().getContentIdString() + "!/" + FILENAME_XML;
     }
 
