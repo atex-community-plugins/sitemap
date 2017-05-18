@@ -14,53 +14,9 @@ You will need to modify the webapp-dispatcher web.xml:
     <servlet-class>com.atex.plugins.sitemap.SitemapGeneratorServlet</servlet-class>
   </servlet>
 
-  <servlet>
-    <servlet-name>sitemapRead</servlet-name>
-    <servlet-class>com.atex.plugins.sitemap.SitemapReadServlet</servlet-class>
-  </servlet>
-
   <servlet-mapping>
     <servlet-name>sitemapGenerator</servlet-name>
     <url-pattern>/sitemapGenerator</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_news.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_video.xml</url-pattern>
-  </servlet-mapping>
-```
-
-and the webapp-front web.xml:
-
-```
-  <servlet>
-    <servlet-name>sitemapRead</servlet-name>
-    <servlet-class>com.atex.plugins.sitemap.SitemapReadServlet</servlet-class>
-  </servlet>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_news.xml</url-pattern>
-  </servlet-mapping>
-
-  <servlet-mapping>
-    <servlet-name>sitemapRead</servlet-name>
-    <url-pattern>/sitemap_video.xml</url-pattern>
   </servlet-mapping>
 ```
 
@@ -193,3 +149,32 @@ This plugins defines two variants: `NewsArticleSitemapBean` and `VideoSitemapBea
 You need to provide a mapper or a composer for such variants if you want to have the sitemap XML
 being generated automatically. As an alternative, the old approach on java interfaces is still
 supported, the equivalent are `NewsSitemapable` and `VideoSitemapable`.
+
+## Upgrade notes
+
+#### 1.2 
+
+* SitemapReadServlet is now added as web-fragment. Remove the following rows from webapp-dispatcher and front web.xml if upgrading from previous version 
+
+```
+  <servlet>
+    <servlet-name>sitemapRead</servlet-name>
+    <servlet-class>com.atex.plugins.sitemap.SitemapReadServlet</servlet-class>
+  </servlet>
+
+  <servlet-mapping>
+    <servlet-name>sitemapRead</servlet-name>
+    <url-pattern>/sitemap.xml</url-pattern>
+  </servlet-mapping>
+
+  <servlet-mapping>
+    <servlet-name>sitemapRead</servlet-name>
+    <url-pattern>/sitemap_news.xml</url-pattern>
+  </servlet-mapping>
+
+  <servlet-mapping>
+    <servlet-name>sitemapRead</servlet-name>
+    <url-pattern>/sitemap_video.xml</url-pattern>
+  </servlet-mapping>
+```
+  
