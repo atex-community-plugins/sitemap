@@ -24,7 +24,7 @@ public class UrlElementNodeBuilder<T extends UrlElementNodeBuilder> extends Elem
          */
         @Override
         protected SimpleDateFormat initialValue() {
-            return new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ssXXX");
+            return new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
         }
 
     };
