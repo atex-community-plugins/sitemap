@@ -15,6 +15,7 @@ import java.util.logging.Logger;
 
 import javax.servlet.http.HttpServletRequest;
 
+import com.polopoly.util.StringUtil;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
@@ -712,6 +713,9 @@ public class SitemapUtil {
 
     // TODO: mnova review this code.
     private String getURLofFile(String domain, SitemapPolicy fileResourcePolicy) {
+        if (StringUtil.isEmpty(domain)) {
+            domain = "http://localhost:8080";
+        }
         return domain + "/polopoly_fs/" + fileResourcePolicy.getContentId().getContentIdString() + "!/" + FILENAME_XML;
     }
 
