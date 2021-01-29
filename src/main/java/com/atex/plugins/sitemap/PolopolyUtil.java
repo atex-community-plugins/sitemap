@@ -57,6 +57,17 @@ public class PolopolyUtil {
 
     private static void getPageStructure(final ContentId startContentId, final PolicyCMServer cmServer,
                                          final List<ContentRead> list) throws CMException {
+
+        boolean exists = false;
+
+        for (ContentRead cr : list) {
+            if (cr.getContentId().getContentId().equals(startContentId)) {
+                exists = true;
+            }
+        }
+        if (exists) {
+            return;
+        }
         ContentRead pageOrSite = cmServer.getContent(startContentId);
         list.add(pageOrSite);
         ContentList pages = pageOrSite.getContentList("polopoly.Department");
