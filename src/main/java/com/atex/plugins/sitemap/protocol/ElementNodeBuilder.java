@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
  */
 public class ElementNodeBuilder<T extends ElementNodeBuilder> {
 
-    private List<Namespaces> namespaces = Lists.newArrayList();
+    private List<Namespaces> namespaces = new ArrayList<>();
     private String rootName;
     private String comment;
 

@@ -316,7 +316,7 @@ public class SitemapUtil {
         final SitemapConfigPolicy configPolicy = getConfig();
         final List<String> sitesId = configPolicy.getSitesId();
         if (sitesId.size() != 0) {
-            sitePolicies = Lists.newArrayList();
+            sitePolicies = new ArrayList<>();
             for (final String siteId : sitesId) {
                 final Policy policy = cmServer.getPolicy(new ExternalContentId(siteId));
                 if (policy instanceof Site) {

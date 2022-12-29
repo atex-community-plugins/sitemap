@@ -32,7 +32,7 @@ public class PolopolyUtil {
     public static ExternalContentId DEFAULT_SITEENGINE_SITES_EXTERNAL_ID = new ExternalContentId(DEFAULT_SITEENGINE_SITES_ID);
 
     public static List<Site> getAllSites(final PolicyCMServer cmServer) throws CMException {
-        final List<Site> list = Lists.newArrayList();
+        final List<Site> list = new ArrayList<>();
         ContentRead content = cmServer.getContent(DEFAULT_SITEENGINE_SITES_EXTERNAL_ID);
         ContentList pages = content.getContentList("polopoly.Department");
         ListIterator<ContentReference> iterator = pages.getListIterator();
